@@ -78,6 +78,8 @@ $(OBJDIR)/GPU/GPUEngine.o: GPU/GPUEngine.cu
 endif
 endif
 
+all: VanitySearch
+
 # AVX2 hash kernels always need -mavx2 (they are gated behind a runtime
 # CPUID check, so a portable build compiles them but only calls them on
 # AVX2-capable CPUs).
@@ -89,8 +91,6 @@ $(OBJDIR)/hash/ripemd160_avx2.o : hash/ripemd160_avx2.cpp
 
 $(OBJDIR)/%.o : %.cpp
 	$(CXX) $(CXXFLAGS) -o $@ -c $<
-
-all: VanitySearch
 
 VanitySearch: $(OBJET)
 	@echo Making VanitySearch...
