@@ -37,18 +37,27 @@ NVCC       = $(CUDA)/bin/nvcc
 # nvcc requires joint notation w/o dot, i.e. "5.2" -> "52"
 ccap       = $(shell echo $(CCAP) | tr -d '.')
 
+# Optimization flags
+# Use "make portable=1" to build a binary that runs on any x86-64 CPU
+# (runtime dispatch still enables SSE code paths only).
+ifdef portable
+OPTFLAGS   = -O3 -mssse3 -funroll-loops
+else
+OPTFLAGS   = -O3 -march=native -funroll-loops
+endif
+
 ifdef gpu
 ifdef debug
 CXXFLAGS   = -DWITHGPU -m64  -mssse3 -Wno-write-strings -g -I. -I$(CUDA)/include
 else
-CXXFLAGS   =  -DWITHGPU -m64 -mssse3 -Wno-write-strings -O2 -I. -I$(CUDA)/include
+CXXFLAGS   =  -DWITHGPU -m64 $(OPTFLAGS) -Wno-write-strings -I. -I$(CUDA)/include
 endif
 LFLAGS     = -lpthread -L$(CUDA)/lib64 -lcudart
 else
 ifdef debug
 CXXFLAGS   = -m64 -mssse3 -Wno-write-strings -g -I. -I$(CUDA)/include
 else
-CXXFLAGS   =  -m64 -mssse3 -Wno-write-strings -O2 -I. -I$(CUDA)/include
+CXXFLAGS   =  -m64 $(OPTFLAGS) -Wno-write-strings -I. -I$(CUDA)/include
 endif
 LFLAGS     = -lpthread
 endif
