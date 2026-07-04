@@ -36,66 +36,85 @@ extern Int _ONE;
 
 // ------------------------------------------------
 
+// Branchless conditional reduction helpers.
+// Operands are field elements in [0, P) with P < 2^256 (so _P.bits64[4] == 0).
+// These avoid the ~50%-mispredicted data-dependent branch of the original
+// ModAdd/ModSub, which sit on the EC point-generation hot path.
+
+// If (this >= P) then this -= P.  this is in [0, 2P) on entry.
+static inline void CondSubP(uint64_t *b, const uint64_t *P) {
+  uint64_t T[5];
+  unsigned char c = 0;
+  c = _subborrow_u64(c, b[0], P[0], T + 0);
+  c = _subborrow_u64(c, b[1], P[1], T + 1);
+  c = _subborrow_u64(c, b[2], P[2], T + 2);
+  c = _subborrow_u64(c, b[3], P[3], T + 3);
+  c = _subborrow_u64(c, b[4], P[4], T + 4);
+  // borrow (c==1) => this < P => keep b; else use T
+  uint64_t mask = (uint64_t)c - 1ULL; // c==0 -> all ones (use T), c==1 -> 0
+  b[0] = (b[0] & ~mask) | (T[0] & mask);
+  b[1] = (b[1] & ~mask) | (T[1] & mask);
+  b[2] = (b[2] & ~mask) | (T[2] & mask);
+  b[3] = (b[3] & ~mask) | (T[3] & mask);
+  b[4] = (b[4] & ~mask) | (T[4] & mask);
+}
+
+// If (this < 0) then this += P.  Sign is the top bit of limb 4.
+static inline void CondAddP(uint64_t *b, const uint64_t *P) {
+  uint64_t mask = (uint64_t)((int64_t)b[4] >> 63); // all ones if negative
+  unsigned char c = 0;
+  c = _addcarry_u64(c, b[0], P[0] & mask, b + 0);
+  c = _addcarry_u64(c, b[1], P[1] & mask, b + 1);
+  c = _addcarry_u64(c, b[2], P[2] & mask, b + 2);
+  c = _addcarry_u64(c, b[3], P[3] & mask, b + 3);
+  c = _addcarry_u64(c, b[4], P[4] & mask, b + 4);
+}
+
 void Int::ModAdd(Int *a) {
-  Int p;
   Add(a);
-  p.Sub(this,&_P);
-  if(p.IsPositive())
-    Set(&p);
+  CondSubP(bits64, _P.bits64);
 }
 
 // ------------------------------------------------
 
 void Int::ModAdd(Int *a, Int *b) {
-  Int p;
   Add(a,b);
-  p.Sub(this,&_P);
-  if(p.IsPositive())
-    Set(&p);
+  CondSubP(bits64, _P.bits64);
 }
 
 // ------------------------------------------------
 
 void Int::ModDouble() {
-  Int p;
   Add(this);
-  p.Sub(this,&_P);
-  if(p.IsPositive())
-    Set(&p);
+  CondSubP(bits64, _P.bits64);
 }
 
 // ------------------------------------------------
 
 void Int::ModAdd(uint64_t a) {
-  Int p;
   Add(a);
-  p.Sub(this,&_P);
-  if(p.IsPositive())
-    Set(&p);
+  CondSubP(bits64, _P.bits64);
 }
 
 // ------------------------------------------------
 
 void Int::ModSub(Int *a) {
   Sub(a);
-  if (IsNegative())
-    Add(&_P);
+  CondAddP(bits64, _P.bits64);
 }
 
 // ------------------------------------------------
 
 void Int::ModSub(uint64_t a) {
   Sub(a);
-  if (IsNegative())
-    Add(&_P);
+  CondAddP(bits64, _P.bits64);
 }
 
 // ------------------------------------------------
 
 void Int::ModSub(Int *a,Int *b) {
   Sub(a,b);
-  if (IsNegative())
-    Add(&_P);
+  CondAddP(bits64, _P.bits64);
 }
 
 // ------------------------------------------------
