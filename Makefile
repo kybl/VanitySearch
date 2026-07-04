@@ -8,6 +8,7 @@ SRC = Base58.cpp IntGroup.cpp main.cpp Random.cpp \
       Vanity.cpp GPU/GPUGenerate.cpp hash/ripemd160.cpp \
       hash/sha256.cpp hash/sha512.cpp hash/ripemd160_sse.cpp \
       hash/sha256_sse.cpp hash/sha256_avx2.cpp hash/ripemd160_avx2.cpp \
+      hash/sha256_avx512.cpp hash/ripemd160_avx512.cpp \
       Bech32.cpp Wildcard.cpp
 
 OBJDIR = obj
@@ -20,6 +21,7 @@ OBJET = $(addprefix $(OBJDIR)/, \
         hash/ripemd160.o hash/sha256.o hash/sha512.o \
         hash/ripemd160_sse.o hash/sha256_sse.o \
         hash/sha256_avx2.o hash/ripemd160_avx2.o \
+        hash/sha256_avx512.o hash/ripemd160_avx512.o \
         GPU/GPUEngine.o Bech32.o Wildcard.o)
 
 else
@@ -29,7 +31,8 @@ OBJET = $(addprefix $(OBJDIR)/, \
         IntMod.o Point.o SECP256K1.o Vanity.o GPU/GPUGenerate.o \
         hash/ripemd160.o hash/sha256.o hash/sha512.o \
         hash/ripemd160_sse.o hash/sha256_sse.o \
-        hash/sha256_avx2.o hash/ripemd160_avx2.o Bech32.o Wildcard.o)
+        hash/sha256_avx2.o hash/ripemd160_avx2.o \
+        hash/sha256_avx512.o hash/ripemd160_avx512.o Bech32.o Wildcard.o)
 
 endif
 
@@ -88,6 +91,12 @@ $(OBJDIR)/hash/sha256_avx2.o : hash/sha256_avx2.cpp
 
 $(OBJDIR)/hash/ripemd160_avx2.o : hash/ripemd160_avx2.cpp
 	$(CXX) $(CXXFLAGS) -mavx2 -o $@ -c $<
+
+$(OBJDIR)/hash/sha256_avx512.o : hash/sha256_avx512.cpp
+	$(CXX) $(CXXFLAGS) -mavx512f -mavx512bw -o $@ -c $<
+
+$(OBJDIR)/hash/ripemd160_avx512.o : hash/ripemd160_avx512.cpp
+	$(CXX) $(CXXFLAGS) -mavx512f -mavx512bw -o $@ -c $<
 
 $(OBJDIR)/%.o : %.cpp
 	$(CXX) $(CXXFLAGS) -o $@ -c $<

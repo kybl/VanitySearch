@@ -522,6 +522,65 @@ void Secp256K1::GetHash160(int type,bool compressed,
 
 }
 
+void Secp256K1::GetHash160_16(int type, bool compressed, Point *k, uint8_t *hbase) {
+
+  // hbase points to a uint8_t[16][20] buffer (rows of 20, contiguous).
+  unsigned char *h[16];
+  for (int j = 0; j < 16; j++)
+    h[j] = hbase + j * 20;
+
+#ifdef WIN64
+  __declspec(align(64)) unsigned char sh[16][64];
+#else
+  unsigned char sh[16][64] __attribute__((aligned(64)));
+#endif
+  unsigned char *shp[16];
+  for (int j = 0; j < 16; j++)
+    shp[j] = sh[j];
+
+  switch (type) {
+
+  case P2PKH:
+  case BECH32:
+  {
+    if (!compressed) {
+      uint32_t b[16][32];
+      uint32_t *bp[16];
+      for (int j = 0; j < 16; j++) { KEYBUFFUNCOMP(b[j], k[j]); bp[j] = b[j]; }
+      sha256avx512_16x16B(bp, shp);
+      ripemd160avx512_32(shp, h);
+    } else {
+      uint32_t b[16][16];
+      uint32_t *bp[16];
+      for (int j = 0; j < 16; j++) { KEYBUFFCOMP(b[j], k[j]); bp[j] = b[j]; }
+      sha256avx512_16x8B(bp, shp);
+      ripemd160avx512_32(shp, h);
+    }
+  }
+  break;
+
+  case P2SH:
+  {
+    unsigned char kh[16][20];
+    // First hash160 of the pubkeys
+    uint8_t khbase[16 * 20];
+    GetHash160_16(P2PKH, compressed, k, khbase);
+    for (int j = 0; j < 16; j++)
+      memcpy(kh[j], khbase + j * 20, 20);
+
+    // Redeem Script (1 to 1 P2SH)
+    uint32_t b[16][16];
+    uint32_t *bp[16];
+    for (int j = 0; j < 16; j++) { KEYBUFFSCRIPT(b[j], kh[j]); bp[j] = b[j]; }
+    sha256avx512_16x8B(bp, shp);
+    ripemd160avx512_32(shp, h);
+  }
+  break;
+
+  }
+
+}
+
 uint8_t Secp256K1::GetByte(std::string &str, int idx) {
 
   char tmp[3];

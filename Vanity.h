@@ -90,6 +90,7 @@ private:
   void checkAddresses(bool compressed, Int key, int i, Point p1);
   void checkAddressesSSE(bool compressed, Int key, int i, Point p1, Point p2, Point p3, Point p4);
   void checkAddressesAVX2(bool compressed, Int key, int i, Point *p8);
+  void checkAddressesAVX512(bool compressed, Int key, int i, Point *p16);
   void output(std::string addr, std::string pAddr, std::string pAddrHex);
   bool isAlive(TH_PARAM *p);
   bool isSingularPrefix(std::string pref);
@@ -128,6 +129,7 @@ private:
   std::string outputFile;
   bool useSSE;
   bool cpuSupportsAVX2;
+  bool cpuSupportsAVX512;
   bool onlyFull;
   uint32_t maxFound;
   double _difficulty;

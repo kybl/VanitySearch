@@ -43,4 +43,8 @@ void sha256avx2_16B(uint32_t *i0, uint32_t *i1, uint32_t *i2, uint32_t *i3,
   unsigned char *d0, unsigned char *d1, unsigned char *d2, unsigned char *d3,
   unsigned char *d4, unsigned char *d5, unsigned char *d6, unsigned char *d7);
 
+// 16-way AVX-512 variants (b[16] message buffers, d[16] 32-byte digests)
+void sha256avx512_16x8B(uint32_t *b[16], unsigned char *d[16]);
+void sha256avx512_16x16B(uint32_t *b[16], unsigned char *d[16]);
+
 #endif

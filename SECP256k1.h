@@ -50,6 +50,9 @@ public:
     uint8_t *h0, uint8_t *h1, uint8_t *h2, uint8_t *h3,
     uint8_t *h4, uint8_t *h5, uint8_t *h6, uint8_t *h7);
 
+  // 16-way (AVX-512) hash160
+  void GetHash160_16(int type, bool compressed, Point *k /*[16]*/, uint8_t *h /*[16][20]*/);
+
   void GetHash160(int type,bool compressed, Point &pubKey, unsigned char *hash);
 
   std::string GetAddress(int type, bool compressed, Point &pubKey);
