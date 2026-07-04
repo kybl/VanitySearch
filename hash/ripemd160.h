@@ -40,6 +40,11 @@ void ripemd160(unsigned char *input,int length,unsigned char *digest);
 void ripemd160_32(unsigned char *input, unsigned char *digest);
 void ripemd160sse_32(uint8_t *i0, uint8_t *i1, uint8_t *i2, uint8_t *i3,
   uint8_t *d0, uint8_t *d1, uint8_t *d2, uint8_t *d3);
+void ripemd160avx2_32(
+  uint8_t *i0, uint8_t *i1, uint8_t *i2, uint8_t *i3,
+  uint8_t *i4, uint8_t *i5, uint8_t *i6, uint8_t *i7,
+  uint8_t *d0, uint8_t *d1, uint8_t *d2, uint8_t *d3,
+  uint8_t *d4, uint8_t *d5, uint8_t *d6, uint8_t *d7);
 void ripemd160sse_test();
 std::string ripemd160_hex(unsigned char *digest);
 

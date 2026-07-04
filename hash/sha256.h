@@ -33,4 +33,14 @@ void sha256sse_checksum(uint32_t *i0, uint32_t *i1, uint32_t *i2, uint32_t *i3,
 std::string sha256_hex(unsigned char *digest);
 void sha256sse_test();
 
+// 8-way AVX2 variants (i0..i7 message buffers, d0..d7 32-byte digests)
+void sha256avx2_8B(uint32_t *i0, uint32_t *i1, uint32_t *i2, uint32_t *i3,
+  uint32_t *i4, uint32_t *i5, uint32_t *i6, uint32_t *i7,
+  unsigned char *d0, unsigned char *d1, unsigned char *d2, unsigned char *d3,
+  unsigned char *d4, unsigned char *d5, unsigned char *d6, unsigned char *d7);
+void sha256avx2_16B(uint32_t *i0, uint32_t *i1, uint32_t *i2, uint32_t *i3,
+  uint32_t *i4, uint32_t *i5, uint32_t *i6, uint32_t *i7,
+  unsigned char *d0, unsigned char *d1, unsigned char *d2, unsigned char *d3,
+  unsigned char *d4, unsigned char *d5, unsigned char *d6, unsigned char *d7);
+
 #endif

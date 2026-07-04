@@ -49,6 +49,12 @@ VanitySearch::VanitySearch(Secp256K1 *secp, vector<std::string> &inputPrefixes,s
   this->stopWhenFound = stop;
   this->outputFile = outputFile;
   this->useSSE = useSSE;
+#if defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
+  __builtin_cpu_init();
+  this->cpuSupportsAVX2 = __builtin_cpu_supports("avx2");
+#else
+  this->cpuSupportsAVX2 = false;
+#endif
   this->nbGPUThread = 0;
   this->maxFound = maxFound;
   this->rekey = rekey;
@@ -1263,6 +1269,98 @@ void VanitySearch::checkAddressesSSE(bool compressed,Int key, int i, Point p1, P
 }
 
 // ----------------------------------------------------------------------------
+
+// 8-way (AVX2) address check. Handles the standard prefix search only
+// (hasPattern searches keep using the SSE path). Mirrors checkAddressesSSE:
+// for each of the 8 points it checks the point, the two endomorphism images
+// and their curve symmetric (x,-y) counterparts.
+void VanitySearch::checkAddressesAVX2(bool compressed, Int key, int i, Point *p8) {
+
+  unsigned char h[8][20];
+  Point pt[8];
+  Point pte1[8];
+  Point pte2[8];
+
+  for (int n = 0; n < 8; n++)
+    pt[n] = p8[n];
+
+  // Point -------------------------------------------------------------------
+  secp->GetHash160(searchType, compressed,
+    pt[0], pt[1], pt[2], pt[3], pt[4], pt[5], pt[6], pt[7],
+    h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7]);
+  for (int n = 0; n < 8; n++) {
+    prefix_t pr = *(prefix_t *)h[n];
+    if (prefixes[pr].items)
+      checkAddr(pr, h[n], key, i + n, 0, compressed);
+  }
+
+  // Endomorphism #1 : (beta*x, y) = lambda*k*G
+  for (int n = 0; n < 8; n++) {
+    pte1[n].x.ModMulK1(&pt[n].x, &beta);
+    pte1[n].y.Set(&pt[n].y);
+  }
+  secp->GetHash160(searchType, compressed,
+    pte1[0], pte1[1], pte1[2], pte1[3], pte1[4], pte1[5], pte1[6], pte1[7],
+    h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7]);
+  for (int n = 0; n < 8; n++) {
+    prefix_t pr = *(prefix_t *)h[n];
+    if (prefixes[pr].items)
+      checkAddr(pr, h[n], key, i + n, 1, compressed);
+  }
+
+  // Endomorphism #2 : (beta2*x, y) = lambda2*k*G
+  for (int n = 0; n < 8; n++) {
+    pte2[n].x.ModMulK1(&pt[n].x, &beta2);
+    pte2[n].y.Set(&pt[n].y);
+  }
+  secp->GetHash160(searchType, compressed,
+    pte2[0], pte2[1], pte2[2], pte2[3], pte2[4], pte2[5], pte2[6], pte2[7],
+    h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7]);
+  for (int n = 0; n < 8; n++) {
+    prefix_t pr = *(prefix_t *)h[n];
+    if (prefixes[pr].items)
+      checkAddr(pr, h[n], key, i + n, 2, compressed);
+  }
+
+  // Curve symmetry : (x,-y) = -k*G ---------------------------------------------
+  for (int n = 0; n < 8; n++)
+    pt[n].y.ModNeg();
+  secp->GetHash160(searchType, compressed,
+    pt[0], pt[1], pt[2], pt[3], pt[4], pt[5], pt[6], pt[7],
+    h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7]);
+  for (int n = 0; n < 8; n++) {
+    prefix_t pr = *(prefix_t *)h[n];
+    if (prefixes[pr].items)
+      checkAddr(pr, h[n], key, -(i + n), 0, compressed);
+  }
+
+  // Endomorphism #1 symmetric
+  for (int n = 0; n < 8; n++)
+    pte1[n].y.ModNeg();
+  secp->GetHash160(searchType, compressed,
+    pte1[0], pte1[1], pte1[2], pte1[3], pte1[4], pte1[5], pte1[6], pte1[7],
+    h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7]);
+  for (int n = 0; n < 8; n++) {
+    prefix_t pr = *(prefix_t *)h[n];
+    if (prefixes[pr].items)
+      checkAddr(pr, h[n], key, -(i + n), 1, compressed);
+  }
+
+  // Endomorphism #2 symmetric
+  for (int n = 0; n < 8; n++)
+    pte2[n].y.ModNeg();
+  secp->GetHash160(searchType, compressed,
+    pte2[0], pte2[1], pte2[2], pte2[3], pte2[4], pte2[5], pte2[6], pte2[7],
+    h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7]);
+  for (int n = 0; n < 8; n++) {
+    prefix_t pr = *(prefix_t *)h[n];
+    if (prefixes[pr].items)
+      checkAddr(pr, h[n], key, -(i + n), 2, compressed);
+  }
+
+}
+
+// ----------------------------------------------------------------------------
 void VanitySearch::getCPUStartingKey(int thId,Int& key,Point& startP) {
 
   if (rekey > 0) {
@@ -1286,6 +1384,10 @@ void VanitySearch::FindKeyCPU(TH_PARAM *ph) {
   // Global init
   int thId = ph->threadId;
   counters[thId] = 0;
+
+  // Use the 8-way AVX2 path for the common (non-wildcard) prefix search when
+  // the CPU supports AVX2. Wildcard/pattern searches keep the SSE path.
+  bool useAVX2 = useSSE && !hasPattern && cpuSupportsAVX2;
 
   // CPU Thread
   IntGroup *grp = new IntGroup(CPU_GRP_SIZE/2+1);
@@ -1427,7 +1529,27 @@ void VanitySearch::FindKeyCPU(TH_PARAM *ph) {
 #endif
 
     // Check addresses
-    if (useSSE) {
+    if (useAVX2) {
+
+      // 8-way AVX2 path (standard prefix search)
+      for (int i = 0; i < CPU_GRP_SIZE && !endOfSearch; i += 8) {
+
+        switch (searchMode) {
+          case SEARCH_COMPRESSED:
+            checkAddressesAVX2(true, key, i, pts + i);
+            break;
+          case SEARCH_UNCOMPRESSED:
+            checkAddressesAVX2(false, key, i, pts + i);
+            break;
+          case SEARCH_BOTH:
+            checkAddressesAVX2(true, key, i, pts + i);
+            checkAddressesAVX2(false, key, i, pts + i);
+            break;
+        }
+
+      }
+
+    } else if (useSSE) {
 
       for (int i = 0; i < CPU_GRP_SIZE && !endOfSearch; i += 4) {
 

@@ -431,6 +431,97 @@ void Secp256K1::GetHash160(int type,bool compressed,
 
 }
 
+void Secp256K1::GetHash160(int type,bool compressed,
+  Point &k0,Point &k1,Point &k2,Point &k3,
+  Point &k4,Point &k5,Point &k6,Point &k7,
+  uint8_t *h0,uint8_t *h1,uint8_t *h2,uint8_t *h3,
+  uint8_t *h4,uint8_t *h5,uint8_t *h6,uint8_t *h7) {
+
+#ifdef WIN64
+  __declspec(align(16)) unsigned char sh[8][64];
+#else
+  unsigned char sh[8][64] __attribute__((aligned(16)));
+#endif
+
+  switch (type) {
+
+  case P2PKH:
+  case BECH32:
+  {
+
+    if (!compressed) {
+
+      uint32_t b[8][32];
+
+      KEYBUFFUNCOMP(b[0], k0);
+      KEYBUFFUNCOMP(b[1], k1);
+      KEYBUFFUNCOMP(b[2], k2);
+      KEYBUFFUNCOMP(b[3], k3);
+      KEYBUFFUNCOMP(b[4], k4);
+      KEYBUFFUNCOMP(b[5], k5);
+      KEYBUFFUNCOMP(b[6], k6);
+      KEYBUFFUNCOMP(b[7], k7);
+
+      sha256avx2_16B(b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+        sh[0], sh[1], sh[2], sh[3], sh[4], sh[5], sh[6], sh[7]);
+      ripemd160avx2_32(sh[0], sh[1], sh[2], sh[3], sh[4], sh[5], sh[6], sh[7],
+        h0, h1, h2, h3, h4, h5, h6, h7);
+
+    } else {
+
+      uint32_t b[8][16];
+
+      KEYBUFFCOMP(b[0], k0);
+      KEYBUFFCOMP(b[1], k1);
+      KEYBUFFCOMP(b[2], k2);
+      KEYBUFFCOMP(b[3], k3);
+      KEYBUFFCOMP(b[4], k4);
+      KEYBUFFCOMP(b[5], k5);
+      KEYBUFFCOMP(b[6], k6);
+      KEYBUFFCOMP(b[7], k7);
+
+      sha256avx2_8B(b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+        sh[0], sh[1], sh[2], sh[3], sh[4], sh[5], sh[6], sh[7]);
+      ripemd160avx2_32(sh[0], sh[1], sh[2], sh[3], sh[4], sh[5], sh[6], sh[7],
+        h0, h1, h2, h3, h4, h5, h6, h7);
+
+    }
+
+  }
+  break;
+
+  case P2SH:
+  {
+
+    unsigned char kh[8][20];
+
+    GetHash160(P2PKH, compressed, k0, k1, k2, k3, k4, k5, k6, k7,
+      kh[0], kh[1], kh[2], kh[3], kh[4], kh[5], kh[6], kh[7]);
+
+    // Redeem Script (1 to 1 P2SH)
+    uint32_t b[8][16];
+
+    KEYBUFFSCRIPT(b[0], kh[0]);
+    KEYBUFFSCRIPT(b[1], kh[1]);
+    KEYBUFFSCRIPT(b[2], kh[2]);
+    KEYBUFFSCRIPT(b[3], kh[3]);
+    KEYBUFFSCRIPT(b[4], kh[4]);
+    KEYBUFFSCRIPT(b[5], kh[5]);
+    KEYBUFFSCRIPT(b[6], kh[6]);
+    KEYBUFFSCRIPT(b[7], kh[7]);
+
+    sha256avx2_8B(b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+      sh[0], sh[1], sh[2], sh[3], sh[4], sh[5], sh[6], sh[7]);
+    ripemd160avx2_32(sh[0], sh[1], sh[2], sh[3], sh[4], sh[5], sh[6], sh[7],
+      h0, h1, h2, h3, h4, h5, h6, h7);
+
+  }
+  break;
+
+  }
+
+}
+
 uint8_t Secp256K1::GetByte(std::string &str, int idx) {
 
   char tmp[3];

@@ -7,7 +7,8 @@ SRC = Base58.cpp IntGroup.cpp main.cpp Random.cpp \
       Timer.cpp Int.cpp IntMod.cpp Point.cpp SECP256K1.cpp \
       Vanity.cpp GPU/GPUGenerate.cpp hash/ripemd160.cpp \
       hash/sha256.cpp hash/sha512.cpp hash/ripemd160_sse.cpp \
-      hash/sha256_sse.cpp Bech32.cpp Wildcard.cpp
+      hash/sha256_sse.cpp hash/sha256_avx2.cpp hash/ripemd160_avx2.cpp \
+      Bech32.cpp Wildcard.cpp
 
 OBJDIR = obj
 
@@ -18,6 +19,7 @@ OBJET = $(addprefix $(OBJDIR)/, \
         IntMod.o Point.o SECP256K1.o Vanity.o GPU/GPUGenerate.o \
         hash/ripemd160.o hash/sha256.o hash/sha512.o \
         hash/ripemd160_sse.o hash/sha256_sse.o \
+        hash/sha256_avx2.o hash/ripemd160_avx2.o \
         GPU/GPUEngine.o Bech32.o Wildcard.o)
 
 else
@@ -26,7 +28,8 @@ OBJET = $(addprefix $(OBJDIR)/, \
         Base58.o IntGroup.o main.o Random.o Timer.o Int.o \
         IntMod.o Point.o SECP256K1.o Vanity.o GPU/GPUGenerate.o \
         hash/ripemd160.o hash/sha256.o hash/sha512.o \
-        hash/ripemd160_sse.o hash/sha256_sse.o Bech32.o Wildcard.o)
+        hash/ripemd160_sse.o hash/sha256_sse.o \
+        hash/sha256_avx2.o hash/ripemd160_avx2.o Bech32.o Wildcard.o)
 
 endif
 
@@ -74,6 +77,15 @@ $(OBJDIR)/GPU/GPUEngine.o: GPU/GPUEngine.cu
 	$(NVCC) -maxrregcount=0 --ptxas-options=-v --compile --compiler-options -fPIC -ccbin $(CXXCUDA) -m64 -O2 -I$(CUDA)/include -gencode=arch=compute_$(ccap),code=sm_$(ccap) -o $(OBJDIR)/GPU/GPUEngine.o -c GPU/GPUEngine.cu
 endif
 endif
+
+# AVX2 hash kernels always need -mavx2 (they are gated behind a runtime
+# CPUID check, so a portable build compiles them but only calls them on
+# AVX2-capable CPUs).
+$(OBJDIR)/hash/sha256_avx2.o : hash/sha256_avx2.cpp
+	$(CXX) $(CXXFLAGS) -mavx2 -o $@ -c $<
+
+$(OBJDIR)/hash/ripemd160_avx2.o : hash/ripemd160_avx2.cpp
+	$(CXX) $(CXXFLAGS) -mavx2 -o $@ -c $<
 
 $(OBJDIR)/%.o : %.cpp
 	$(CXX) $(CXXFLAGS) -o $@ -c $<

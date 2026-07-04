@@ -43,6 +43,13 @@ public:
     Point &k0, Point &k1, Point &k2, Point &k3,
     uint8_t *h0, uint8_t *h1, uint8_t *h2, uint8_t *h3);
 
+  // 8-way (AVX2) hash160
+  void GetHash160(int type,bool compressed,
+    Point &k0, Point &k1, Point &k2, Point &k3,
+    Point &k4, Point &k5, Point &k6, Point &k7,
+    uint8_t *h0, uint8_t *h1, uint8_t *h2, uint8_t *h3,
+    uint8_t *h4, uint8_t *h5, uint8_t *h6, uint8_t *h7);
+
   void GetHash160(int type,bool compressed, Point &pubKey, unsigned char *hash);
 
   std::string GetAddress(int type, bool compressed, Point &pubKey);
