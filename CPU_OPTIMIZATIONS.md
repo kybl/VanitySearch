@@ -143,20 +143,36 @@ takže veškerou paralelizaci získává během celé field aritmetiky přes SIM
 bodu — to Ed25519 neumí. Obě strategie jsou pro svou křivku dobré; VanitySearch
 je na 4 jádrech AVX-512 srovnatelně rychlý (~38-48 Mkey/s) jako mc-keygen (~34).
 
-## Identifikovaný další velký pákový bod (budoucí práce)
+## SIMD field aritmetika napříč klíči — prozkoumáno, NEVYPLÁCÍ se bez IFMA
 
-Po zrychlení hashování je běh z ~63 % hash-bound a hashování je maximálně
-paralelizované. Zbylých ~37 % je scalar field aritmetika (generování bodů +
-endomorfismy). Jediná cesta, jak ji výrazně zrychlit, je **SIMD napříč klíči**
-jako v mc-keygen: přepsat `ModMulK1`/`ModSquareK1`/`ModSub`/`ModAdd` na 8-wide
-AVX-512 verzi (radix 2^51 nebo 5×52-bit s **AVX-512 IFMA** `vpmadd52`,
-který tento „Ice-Lake-class" CPU má) a generovat body ve smyčce po 8 lanech
-(iterace jsou navzájem nezávislé). Realistický odhad ~1,3-1,4× navíc
-(~37 % → ~10 % času). Je to ale velký a chybově náchylný kus (carry
-propagace, líná redukce, secp redukce `0x1000003D1` napříč lanes) — vyžadoval
-by vlastní SIMD field knihovnu s důkladnými differenciálními testy proti
-skalární referenci. Nebylo provedeno v tomto kole kvůli poměru
-riziko/přínos, ale je to jasně další krok.
+Po zrychlení hashování je běh z ~63 % hash-bound; zbylých ~37 % je skalární
+field aritmetika (generování bodů + endomorfismy). Jediná cesta, jak ji
+výrazně zrychlit, je **SIMD napříč klíči** jako v mc-keygen: field ops (mult,
+square, add, sub) na 8 nezávislých klíčů v AVX-512 lanes.
+
+**Postavil jsem a otestoval kompletní 8-wide field aritmetiku** (radix 2^26,
+10 limbů, `vpmuludq`): `fmul8`/`fadd8`/`fsub8`/`fneg8` s vlastní redukcí
+(fold přes 2^260 ≡ 16·`0x1000003D1` a 2^256 ≡ `0x1000003D1`). Všechny prošly
+differenciálními testy proti skalární referenci (`Int::ModMulK1` atd.),
+32-40 tis. náhodných případů × 8 lanes na operaci. (Během toho jsem našel dvě
+klasické pasti: `_mm512_mul_epu32` násobí jen dolních 32 bitů, takže 33-bitová
+redukční konstanta se musí rozložit na 26-bit limby; a two's-complement odčítání
+zanáší fantomový 2^260 — vyřešeno biasem +p před odečtením.)
+
+**Výsledek měření: SIMD je ale POMALEJŠÍ** — `fmul8` běží na ~32 Mmul/s vs
+skalární `ModMulK1` ~52 Mmul/s (**0,62×**), a to i throughput-orientovaně s
+nezávislými voláními. Důvod: skalární cesta používá `mulx` (64×64→128, ~10
+násobení na 256×256 mult), zatímco bez IFMA má SIMD jen `vpmuludq` (32×32→64),
+takže potřebuje ~100 násobení + dlouhé sériové carry řetězce. 8 lanes
+paralelismu nepřebije ~10× více násobení. **Integrace by tedy výkon zhoršila,
+proto NEBYLA provedena.**
+
+Tato technika by se vyplatila **jen s AVX-512 IFMA** (`vpmadd52`, 52×52 MAC →
+~25 násobení na mult, srovnatelné s `mulx` × 8 lanes). Tento CPU IFMA nemá
+(`avx512ifma=0`); na Ice Lake/Tiger Lake/Zen4+ by to byl reálný ~1,3× zisk.
+Kód SIMD field aritmetiky se do stromu nekomituje (na tomto HW nepřináší nic
+a bez IFMA HW nelze IFMA variantu ověřit), ale postup i pasti jsou zde
+zdokumentované pro budoucí IFMA implementaci.
 
 ## Co se NEvyplatilo / nebylo provedeno a proč
 
