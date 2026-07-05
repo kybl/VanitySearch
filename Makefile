@@ -46,10 +46,20 @@ ccap       = $(shell echo $(CCAP) | tr -d '.')
 # Optimization flags
 # Use "make portable=1" to build a binary that runs on any x86-64 CPU
 # (runtime dispatch still enables SSE code paths only).
+#
+# -fno-strict-aliasing is REQUIRED for correctness: the address/hash code
+# type-puns freely (e.g. *(prefix_t *)hash160, the KEYBUFF* macros), which is
+# undefined behaviour under the default -fstrict-aliasing at -O3 and gets
+# miscompiled once cross-TU inlining (LTO) kicks in.
+#
+# LTO (+ single codegen unit implied by -flto) gives ~+9% here. It is enabled
+# only for the -march=native build: with a native base ISA every function may
+# already use AVX-512, so LTO cannot inline a wide-ISA kernel into a narrower
+# caller. For the portable build LTO is left off to avoid that hazard.
 ifdef portable
-OPTFLAGS   = -O3 -mssse3 -funroll-loops
+OPTFLAGS   = -O3 -mssse3 -funroll-loops -fno-strict-aliasing
 else
-OPTFLAGS   = -O3 -march=native -funroll-loops
+OPTFLAGS   = -O3 -march=native -funroll-loops -fno-strict-aliasing -flto -fno-semantic-interposition
 endif
 
 ifdef gpu
@@ -103,7 +113,7 @@ $(OBJDIR)/%.o : %.cpp
 
 VanitySearch: $(OBJET)
 	@echo Making VanitySearch...
-	$(CXX) $(OBJET) $(LFLAGS) -o VanitySearch
+	$(CXX) $(CXXFLAGS) $(OBJET) $(LFLAGS) -o VanitySearch
 
 $(OBJET): | $(OBJDIR) $(OBJDIR)/GPU $(OBJDIR)/hash
 
