@@ -120,6 +120,44 @@ o ~1-2 % **pomalejší**, takže výchozí build ho nepoužívá. Skript je tu p
 aby si ho uživatel vyzkoušel na svém CPU (mc-keygen hlásí +16 % na Ice Lake,
 −8 % na Broadwellu).
 
+## Inspirace z mc-keygen (sesterský projekt)
+
+[mc-keygen](https://github.com/kybl/mc-keygen) je vysoce CPU-optimalizovaný
+generátor Ed25519 klíčů. Sdílí většinu strategie s VanitySearch a několik
+technik se přeneslo:
+
+| Technika mc-keygen | Stav ve VanitySearch |
+|---|---|
+| +8B adiční řetězec místo plného scalar-mult | **už měl** (`startP ± i*G`) |
+| Montgomery dávková inverze (1 inverze / skupinu) | **už měl** (`IntGroup::ModInv`) |
+| runtime SIMD dispatch (AVX-512 → AVX2 → scalar) | **doplněno** pro hashování |
+| LTO + codegen-units=1 | **doplněno** (+9 %) |
+| PGO skript s měřením plain vs PGO | **doplněno** (`scripts/pgo-build.sh`) |
+| kernel prefiltr (odmítne 99 % kandidátů) | ekvivalent: 16-bit prefix tabulka |
+| **SIMD napříč klíči pro field aritmetiku** | **nepřeneseno** — viz níže |
+
+Zásadní rozdíl: mc-keygen je Ed25519, který **nemá efektivní endomorfismus**,
+takže veškerou paralelizaci získává během celé field aritmetiky přes SIMD lanes
+(8 nezávislých klíčů v AVX-512). VanitySearch je secp256k1 a využívá
+**endomorfismus (λ) + symetrii**, což dává 6 kandidátů z jednoho spočítaného
+bodu — to Ed25519 neumí. Obě strategie jsou pro svou křivku dobré; VanitySearch
+je na 4 jádrech AVX-512 srovnatelně rychlý (~38-48 Mkey/s) jako mc-keygen (~34).
+
+## Identifikovaný další velký pákový bod (budoucí práce)
+
+Po zrychlení hashování je běh z ~63 % hash-bound a hashování je maximálně
+paralelizované. Zbylých ~37 % je scalar field aritmetika (generování bodů +
+endomorfismy). Jediná cesta, jak ji výrazně zrychlit, je **SIMD napříč klíči**
+jako v mc-keygen: přepsat `ModMulK1`/`ModSquareK1`/`ModSub`/`ModAdd` na 8-wide
+AVX-512 verzi (radix 2^51 nebo 5×52-bit s **AVX-512 IFMA** `vpmadd52`,
+který tento „Ice-Lake-class" CPU má) a generovat body ve smyčce po 8 lanech
+(iterace jsou navzájem nezávislé). Realistický odhad ~1,3-1,4× navíc
+(~37 % → ~10 % času). Je to ale velký a chybově náchylný kus (carry
+propagace, líná redukce, secp redukce `0x1000003D1` napříč lanes) — vyžadoval
+by vlastní SIMD field knihovnu s důkladnými differenciálními testy proti
+skalární referenci. Nebylo provedeno v tomto kole kvůli poměru
+riziko/přínos, ale je to jasně další krok.
+
 ## Co se NEvyplatilo / nebylo provedeno a proč
 
 - **Přepis `ModMulK1`/`ModSquareK1` na MULX/ADCX/ADOX (dvě carry větve):**
