@@ -12,5 +12,8 @@ obj/
 .idea/
 CMakeLists.txt
 VanitySearch
+VanitySearch-pgo
+pgo-data/
+*.gcda
 cmake-build-debug/
 *.prf

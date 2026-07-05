@@ -10,12 +10,16 @@ jako inspirace (branchless aritmetika, endomorfismy).
 |---|---|---|
 | Výchozí stav (`-O2 -mssse3`, SSE 4-way hash) | 14,7 | 1,00× |
 | + optimalizační flagy (`-O3 -march=native`) | 19,5 | 1,33× |
-| + AVX2 8-way hashování | ~30 | 2,04× |
-| + AVX-512 16-way hashování | **~38** | **2,6×** |
+| + AVX2 8-way hashování | ~30 | 2,0× |
+| + AVX-512 16-way hashování | ~38 | 2,6× |
 | + branchless field aritmetika | ~38 (v šumu) | — |
+| + LTO (`-flto`) | **~2,8-3×** | **~2,8-3×** |
 
-**Celkově ~2,6× rychlejší** oproti původnímu stavu, plus oprava vážné chyby
-ve výpočtu checksumu (viz níže) a oprava buildu.
+Absolutní čísla kolísají podle zátěže cloud VM (± ~15 %); zrychlení jednotlivých
+kroků je měřeno vždy A/B ve stejné session. LTO přidalo měřeně **+9 %**.
+
+**Celkově ~3× rychlejší** oproti původnímu stavu, plus oprava vážné chyby
+ve výpočtu checksumu (viz níže) a dvě opravy buildu.
 
 ## Jak CPU část funguje
 
@@ -94,6 +98,27 @@ optimalizace / jiných překladačích.
 ### 6. Oprava Makefile
 Explicitní pravidla pro `*_avx2.o` byla před cílem `all`, takže se stala
 výchozím cílem `make` a čistý build spadl po prvním objektu. Přesunuto za `all`.
+
+### 7. LTO + oprava strict-aliasing UB (~+9 %)
+Inspirováno sesterským projektem mc-keygen (`lto=true, codegen-units=1`).
+Dvě provázané změny:
+- `-fno-strict-aliasing` — **oprava správnosti**. Adresní/hashovací kód všude
+  type-punuje (`*(prefix_t *)hash160`, makra `KEYBUFF*`), což je UB pod
+  výchozím `-fstrict-aliasing` na `-O3`. Bez LTO to náhodou funguje, ale
+  s cross-TU inliningem (LTO) se to miscompiluje (všechny adresní vektory
+  v `-check` selhaly se špatnou adresou). Tento flag je správný nezávisle na LTO.
+- `-flto -fno-semantic-interposition` na `-march=native` buildu — **~+9 %**
+  (~44,5 → ~48,6 Mkey/s, 4 vlákna). Jen pro native build (základní ISA je už
+  AVX-512, takže LTO nemůže inlinovat širší kernel do užšího volajícího);
+  portable build nechává LTO vypnuté.
+
+### 8. PGO build (volitelný, `scripts/pgo-build.sh`)
+Také z mc-keygen. Skript udělá instrumentovaný build, krátký reprezentativní
+běh a rebuild s profilem, pak **změří plain vs PGO na daném stroji** a řekne,
+který vyhrál. Efekt je mikroarchitekturně specifický: na tomto stroji byl PGO
+o ~1-2 % **pomalejší**, takže výchozí build ho nepoužívá. Skript je tu proto,
+aby si ho uživatel vyzkoušel na svém CPU (mc-keygen hlásí +16 % na Ice Lake,
+−8 % na Broadwellu).
 
 ## Co se NEvyplatilo / nebylo provedeno a proč
 
