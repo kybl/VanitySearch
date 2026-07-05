@@ -56,10 +56,14 @@ ccap       = $(shell echo $(CCAP) | tr -d '.')
 # only for the -march=native build: with a native base ISA every function may
 # already use AVX-512, so LTO cannot inline a wide-ISA kernel into a narrower
 # caller. For the portable build LTO is left off to avoid that hazard.
+# PGOFLAGS is injected by scripts/pgo-build.sh for profile-generate /
+# profile-use passes; empty for a normal build.
+PGOFLAGS ?=
+
 ifdef portable
-OPTFLAGS   = -O3 -mssse3 -funroll-loops -fno-strict-aliasing
+OPTFLAGS   = -O3 -mssse3 -funroll-loops -fno-strict-aliasing $(PGOFLAGS)
 else
-OPTFLAGS   = -O3 -march=native -funroll-loops -fno-strict-aliasing -flto -fno-semantic-interposition
+OPTFLAGS   = -O3 -march=native -funroll-loops -fno-strict-aliasing -flto -fno-semantic-interposition $(PGOFLAGS)
 endif
 
 ifdef gpu
@@ -126,9 +130,25 @@ $(OBJDIR)/GPU: $(OBJDIR)
 $(OBJDIR)/hash: $(OBJDIR)
 	cd $(OBJDIR) &&	mkdir -p hash
 
+# Correctness tests for the vectorized hash kernels. Compiles the scalar and
+# all SIMD hash objects (each with its own ISA flags) and links a small test
+# driver. Runtime CPUID is irrelevant here: the test calls every kernel
+# directly, so it only makes sense to run on a machine that supports them.
+TEST_HASH_OBJ = $(OBJDIR)/hash/sha256.o $(OBJDIR)/hash/ripemd160.o \
+                $(OBJDIR)/hash/sha256_sse.o $(OBJDIR)/hash/ripemd160_sse.o \
+                $(OBJDIR)/hash/sha256_avx2.o $(OBJDIR)/hash/ripemd160_avx2.o \
+                $(OBJDIR)/hash/sha256_avx512.o $(OBJDIR)/hash/ripemd160_avx512.o
+
+test: $(TEST_HASH_OBJ) | $(OBJDIR)/hash
+	@echo Building hash kernel tests...
+	$(CXX) -m64 -O2 -march=native -DWITH_AVX2 -DWITH_AVX512 -Wno-write-strings \
+	  tests/hash_test.cpp $(TEST_HASH_OBJ) -o $(OBJDIR)/hash_test
+	@$(OBJDIR)/hash_test
+
 clean:
 	@echo Cleaning...
 	@rm -f obj/*.o
 	@rm -f obj/GPU/*.o
 	@rm -f obj/hash/*.o
+	@rm -f obj/hash_test
 
